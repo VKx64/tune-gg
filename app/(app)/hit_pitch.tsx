@@ -1,70 +1,66 @@
-import { Audio } from 'expo-av';
+import { AudioModule, RecordingPresets, useAudioRecorder } from 'expo-audio';
 import React, { useEffect, useState } from 'react';
-import { Button, Text, View } from 'react-native';
+import { Alert, Button, Text, View } from 'react-native';
 import { PitchDetector } from 'react-native-pitch-detector';
-
-
 
 const HitPitch: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
-  const [note, setNote] = useState<string>('');
-// No need for pitchDetectorRef, use static API
-  const recordingRef = React.useRef<Audio.Recording | null>(null);
+  const [note, setNote] = useState<string>(''); // Holds the detected note
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   useEffect(() => {
-    // Cleanup function to stop pitch detection and recording when the component unmounts
-    return () => {
-      PitchDetector.stop();
-      PitchDetector.removeListener();
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync();
+    // Request recording permissions on component mount
+    (async () => {
+      const status = await AudioModule.requestRecordingPermissionsAsync();
+      if (!status.granted) {
+        Alert.alert('Permission to access microphone was denied');
       }
+    })();
+
+    // Cleanup function to stop pitch detection when the component unmounts
+    return () => {
+      PitchDetector.stop(); // Stop pitch detection
+      PitchDetector.removeListener(); // Remove the pitch detection listener
     };
   }, []);
 
   // Start or stop recording
   const toggleRecording = async () => {
     if (!isRecording) {
-      await startRecording();
+      await startRecording(); // Start recording
     } else {
-      await stopRecording();
+      await stopRecording(); // Stop recording
     }
   };
 
   // Start recording and detect pitch
   const startRecording = async () => {
     try {
-      await Audio.requestPermissionsAsync();
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      // Start the recording
-      await recording.startAsync();
-      recordingRef.current = recording;
-      setIsRecording(true);
+      // Prepare and start recording
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setIsRecording(true); // Set recording state to true
 
       // Start pitch detection and listen for pitch events
       await PitchDetector.start();
       PitchDetector.addListener((result: { frequency: number; tone: string }) => {
-        setNote(result.tone || String(result.frequency));
+        setNote(result.tone || String(result.frequency)); // Update the detected note
       });
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('Error starting recording:', error); // Handle errors
     }
   };
 
   // Stop recording
   const stopRecording = async () => {
     if (isRecording) {
+      // Stop pitch detection and remove listener
       await PitchDetector.stop();
       PitchDetector.removeListener();
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-        recordingRef.current = null;
-      }
-      setIsRecording(false);
+
+      // Stop the recording
+      await audioRecorder.stop();
+      setIsRecording(false); // Set recording state to false
     }
   };
 
