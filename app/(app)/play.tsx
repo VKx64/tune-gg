@@ -25,7 +25,7 @@ export default function PlayScreen() {
         <TouchableOpacity
           style={[styles.gameModeButton, styles.pitchButton]}
           onPress={() => {
-            router.push('/(app)/game_hit' as any);
+            router.push('/(app)/hit_pitch');
           }}
         >
           <Text style={styles.gameModeButtonText}>Hit Pitch</Text>
