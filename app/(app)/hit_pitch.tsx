@@ -13,7 +13,7 @@ const NOTE_NAMES = [
 
 // Function to convert frequency to note
 const frequencyToNote = (frequency: number): { note: string; octave: number; cents: number } => {
-  if (!frequency || frequency <= 0) {
+  if (!frequency || frequency <= 0 || isNaN(frequency)) {
     return { note: '--', octave: 0, cents: 0 };
   }
 
@@ -25,16 +25,24 @@ const frequencyToNote = (frequency: number): { note: string; octave: number; cen
     return { note: '--', octave: 0, cents: 0 };
   }
 
-  const h = Math.round(12 * Math.log2(frequency / C0));
-  const octave = Math.floor(h / 12);
-  const n = h % 12;
-  const note = NOTE_NAMES[n];
+  try {
+    const h = Math.round(12 * Math.log2(frequency / C0));
+    const octave = Math.floor(h / 12);
+    const n = h % 12;
+    const note = NOTE_NAMES[n >= 0 && n < NOTE_NAMES.length ? n : 0] || '--';
 
-  // Calculate cents deviation from exact pitch
-  const exactFreq = C0 * Math.pow(2, h / 12);
-  const cents = Math.round(1200 * Math.log2(frequency / exactFreq));
+    // Calculate cents deviation from exact pitch
+    const exactFreq = C0 * Math.pow(2, h / 12);
+    const cents = Math.round(1200 * Math.log2(frequency / exactFreq));
 
-  return { note, octave, cents };
+    return {
+      note: note || '--',
+      octave: isNaN(octave) ? 0 : octave,
+      cents: isNaN(cents) ? 0 : cents
+    };
+  } catch (error) {
+    return { note: '--', octave: 0, cents: 0 };
+  }
 };
 
 interface PitchDisplayProps {
@@ -43,7 +51,22 @@ interface PitchDisplayProps {
 }
 
 const PitchDisplay: React.FC<PitchDisplayProps> = ({ frequency, confidence = 0 }) => {
-  const { note, octave, cents } = frequencyToNote(frequency);
+  let note = '--', octave = 0, cents = 0;
+  
+  // Only calculate note if we have a valid frequency
+  if (typeof frequency === 'number' && !isNaN(frequency) && frequency > 0) {
+    const result = frequencyToNote(frequency);
+    note = result.note;
+    octave = result.octave;
+    cents = result.cents;
+  }
+
+  // Ensure all values are valid and defined
+  const safeFrequency = (typeof frequency === 'number' && !isNaN(frequency) && frequency > 0) ? frequency : 0;
+  const safeConfidence = Number(confidence) || 0;
+  const safeCents = Number(cents) || 0;
+  const safeNote = note || '--';
+  const safeOctave = octave || 0;
 
   const getConfidenceColor = (conf: number) => {
     if (conf > 0.8) return '#4CAF50'; // Green - high confidence
@@ -61,25 +84,25 @@ const PitchDisplay: React.FC<PitchDisplayProps> = ({ frequency, confidence = 0 }
   return (
     <View style={styles.pitchDisplay}>
       <View style={styles.noteContainer}>
-        <Text style={styles.noteText}>{note}</Text>
-        <Text style={styles.octaveText}>{octave}</Text>
+        <Text style={styles.noteText}>{safeNote}</Text>
+        <Text style={styles.octaveText}>{safeOctave}</Text>
       </View>
 
       <Text style={styles.frequencyText}>
-        {frequency.toFixed(1)} Hz
+        {safeFrequency > 0 ? `${safeFrequency.toFixed(1)} Hz` : 'No pitch detected'}
       </Text>
 
-      {cents !== 0 && (
-        <View style={[styles.centsContainer, { backgroundColor: getCentsColor(cents) }]}>
+      {safeCents !== 0 && safeFrequency > 0 && (
+        <View style={[styles.centsContainer, { backgroundColor: getCentsColor(safeCents) }]}>
           <Text style={styles.centsText}>
-            {cents > 0 ? '+' : ''}{cents} cents
+            {safeCents > 0 ? '+' : ''}{String(safeCents)} cents
           </Text>
         </View>
       )}
 
-      <View style={[styles.confidenceBar, { backgroundColor: getConfidenceColor(confidence) }]}>
+      <View style={[styles.confidenceBar, { backgroundColor: getConfidenceColor(safeConfidence) }]}>
         <Text style={styles.confidenceText}>
-          Confidence: {(confidence * 100).toFixed(0)}%
+          Confidence: {(safeConfidence * 100).toFixed(0)}%
         </Text>
       </View>
     </View>
@@ -87,7 +110,7 @@ const PitchDisplay: React.FC<PitchDisplayProps> = ({ frequency, confidence = 0 }
 };
 
 interface AudioFeaturesDisplayProps {
-  features: AudioFeatures;
+  features: AudioFeatures | null;
 }
 
 const AudioFeaturesDisplay: React.FC<AudioFeaturesDisplayProps> = ({ features }) => {
@@ -95,40 +118,40 @@ const AudioFeaturesDisplay: React.FC<AudioFeaturesDisplayProps> = ({ features })
     <View style={styles.featuresContainer}>
       <Text style={styles.featuresTitle}>Audio Analysis</Text>
 
-      {features.pitch && (
-        <View style={styles.featureRow}>
-          <Text style={styles.featureLabel}>Pitch:</Text>
-          <Text style={styles.featureValue}>{features.pitch.toFixed(1)} Hz</Text>
-        </View>
-      )}
+      <View style={styles.featureRow}>
+        <Text style={styles.featureLabel}>Pitch:</Text>
+        <Text style={styles.featureValue}>
+          {features?.pitch && typeof features.pitch === 'number' ? `${features.pitch.toFixed(1)} Hz` : 'No data'}
+        </Text>
+      </View>
 
-      {features.rms && (
-        <View style={styles.featureRow}>
-          <Text style={styles.featureLabel}>Volume (RMS):</Text>
-          <Text style={styles.featureValue}>{features.rms.toFixed(4)}</Text>
-        </View>
-      )}
+      <View style={styles.featureRow}>
+        <Text style={styles.featureLabel}>Volume (RMS):</Text>
+        <Text style={styles.featureValue}>
+          {features?.rms && typeof features.rms === 'number' ? features.rms.toFixed(4) : 'No data'}
+        </Text>
+      </View>
 
-      {features.energy && (
-        <View style={styles.featureRow}>
-          <Text style={styles.featureLabel}>Energy:</Text>
-          <Text style={styles.featureValue}>{features.energy.toFixed(4)}</Text>
-        </View>
-      )}
+      <View style={styles.featureRow}>
+        <Text style={styles.featureLabel}>Energy:</Text>
+        <Text style={styles.featureValue}>
+          {features?.energy && typeof features.energy === 'number' ? features.energy.toFixed(4) : 'No data'}
+        </Text>
+      </View>
 
-      {features.spectralCentroid && (
-        <View style={styles.featureRow}>
-          <Text style={styles.featureLabel}>Brightness:</Text>
-          <Text style={styles.featureValue}>{features.spectralCentroid.toFixed(1)} Hz</Text>
-        </View>
-      )}
+      <View style={styles.featureRow}>
+        <Text style={styles.featureLabel}>Brightness:</Text>
+        <Text style={styles.featureValue}>
+          {features?.spectralCentroid && typeof features.spectralCentroid === 'number' ? `${features.spectralCentroid.toFixed(1)} Hz` : 'No data'}
+        </Text>
+      </View>
 
-      {features.hnr && (
-        <View style={styles.featureRow}>
-          <Text style={styles.featureLabel}>Harmony/Noise:</Text>
-          <Text style={styles.featureValue}>{features.hnr.toFixed(2)}</Text>
-        </View>
-      )}
+      <View style={styles.featureRow}>
+        <Text style={styles.featureLabel}>Harmony/Noise:</Text>
+        <Text style={styles.featureValue}>
+          {features?.hnr && typeof features.hnr === 'number' ? features.hnr.toFixed(2) : 'No data'}
+        </Text>
+      </View>
     </View>
   );
 };
@@ -137,6 +160,7 @@ export default function HitPitchScreen() {
   const [currentPitch, setCurrentPitch] = useState<number>(0);
   const [pitchConfidence, setPitchConfidence] = useState<number>(0);
   const [realtimeFeatures, setRealtimeFeatures] = useState<AudioFeatures | null>(null);
+  const [audioLevel, setAudioLevel] = useState<number>(0); // Add audio level indicator
 
   // Initialize the audio recorder with pitch detection enabled
   const {
@@ -161,19 +185,63 @@ export default function HitPitchScreen() {
 
   // Update real-time pitch data when analysis data changes
   useEffect(() => {
-    if (analysisData && analysisData.dataPoints.length > 0) {
+    if (analysisData && analysisData.dataPoints && analysisData.dataPoints.length > 0) {
       const latestPoint = analysisData.dataPoints[analysisData.dataPoints.length - 1];
-      if (latestPoint.features) {
+      if (latestPoint && latestPoint.features) {
         setRealtimeFeatures(latestPoint.features);
 
-        if (latestPoint.features.pitch && latestPoint.features.pitch > 0) {
+        // Update audio level indicator
+        const rmsLevel = latestPoint.features.rms || 0;
+        setAudioLevel(Math.min(rmsLevel * 1000, 1)); // Scale RMS for visualization
+
+        // Debug: Log all received features
+        console.log('🎤 Audio Features:', {
+          pitch: latestPoint.features.pitch,
+          rms: latestPoint.features.rms,
+          energy: latestPoint.features.energy,
+          hnr: latestPoint.features.hnr,
+          spectralCentroid: latestPoint.features.spectralCentroid
+        });
+
+        // Check if we have significant audio activity
+        const hasAudioActivity = (latestPoint.features.rms || 0) > 0.05 || (latestPoint.features.energy || 0) > 3;
+        console.log(`🎵 Audio Activity Check: RMS=${(latestPoint.features.rms || 0).toFixed(4)}, Energy=${(latestPoint.features.energy || 0).toFixed(2)}, HasActivity=${hasAudioActivity}`);
+
+        if (latestPoint.features.pitch && typeof latestPoint.features.pitch === 'number' && latestPoint.features.pitch > 0) {
+          // Use actual detected pitch
           setCurrentPitch(latestPoint.features.pitch);
-          // Calculate confidence based on HNR and energy
-          const confidence = Math.min(
-            (latestPoint.features.hnr || 0) / 20, // HNR-based confidence
-            (latestPoint.features.energy || 0) * 100 // Energy-based confidence
-          );
-          setPitchConfidence(Math.max(0, Math.min(1, confidence)));
+          setPitchConfidence(0.9); // High confidence when pitch is detected
+          
+          const { note, octave, cents } = frequencyToNote(latestPoint.features.pitch);
+          console.log(`🎵 Detected Note: ${note}${octave} | Frequency: ${latestPoint.features.pitch.toFixed(1)}Hz | Cents: ${cents > 0 ? '+' : ''}${cents} | Confidence: 90%`);
+        } else if (hasAudioActivity) {
+          // Try to estimate pitch from spectral centroid for piano
+          const spectralCentroid = latestPoint.features.spectralCentroid || 0;
+          const energy = latestPoint.features.energy || 0;
+          
+          // Very rough estimation: spectral centroid often correlates with fundamental for piano
+          // This is experimental and may need adjustment
+          if (spectralCentroid > 4000 && spectralCentroid < 15000 && energy > 3) {
+            // Rough conversion from spectral centroid to potential fundamental
+            const estimatedPitch = spectralCentroid * 0.12; // Reduced factor for high spectral centroid
+            
+            if (estimatedPitch >= 80 && estimatedPitch <= 2000) { // Piano range roughly
+              setCurrentPitch(estimatedPitch);
+              setPitchConfidence(0.3); // Lower confidence for estimated pitch
+              
+              const { note, octave, cents } = frequencyToNote(estimatedPitch);
+              console.log(`� Estimated Note (from spectral): ${note}${octave} | Est. Frequency: ${estimatedPitch.toFixed(1)}Hz | Spectral Centroid: ${spectralCentroid.toFixed(1)}Hz`);
+            } else {
+              setCurrentPitch(0);
+              setPitchConfidence(0);
+            }
+          } else {
+            setCurrentPitch(0);
+            setPitchConfidence(0);
+          }
+        } else {
+          setCurrentPitch(0);
+          setPitchConfidence(0);
         }
       }
     }
@@ -187,17 +255,15 @@ export default function HitPitchScreen() {
         channels: 1, // Mono recording
         encoding: 'pcm_16bit',
         enableProcessing: true,
-        interval: 50, // Fast updates for real-time feedback (50ms)
-        intervalAnalysis: 50, // Fast analysis updates
+        interval: 200, // Slower updates for more stable pitch detection (200ms)
+        intervalAnalysis: 200, // Match interval for consistency
 
-        // Enable specific features for pitch detection
+        // Enable specific features for pitch detection - focus on piano
         features: {
           pitch: true, // Enable pitch detection
           rms: true, // Volume level
           energy: true, // Energy level
-          hnr: true, // Harmonics-to-noise ratio for pitch confidence
           spectralCentroid: true, // Brightness
-          spectralFlatness: true, // Useful for instrument classification
         },
 
         // Handle real-time audio analysis
@@ -210,13 +276,35 @@ export default function HitPitchScreen() {
               setRealtimeFeatures(latestPoint.features);
 
               if (latestPoint.features.pitch && latestPoint.features.pitch > 0) {
+                // Use actual detected pitch
                 setCurrentPitch(latestPoint.features.pitch);
-
-                // Calculate pitch confidence
-                const hnrConfidence = Math.min((latestPoint.features.hnr || 0) / 20, 1);
-                const energyConfidence = Math.min((latestPoint.features.energy || 0) * 50, 1);
-                const confidence = Math.max(0, Math.min(1, (hnrConfidence + energyConfidence) / 2));
-                setPitchConfidence(confidence);
+                setPitchConfidence(0.9);
+              } else {
+                // Try spectral centroid estimation for piano
+                const hasAudioActivity = (latestPoint.features.rms || 0) > 0.05 || (latestPoint.features.energy || 0) > 10;
+                
+                if (hasAudioActivity) {
+                  const spectralCentroid = latestPoint.features.spectralCentroid || 0;
+                  const energy = latestPoint.features.energy || 0;
+                  
+                  if (spectralCentroid > 4000 && spectralCentroid < 15000 && energy > 3) {
+                    const estimatedPitch = spectralCentroid * 0.12;
+                    
+                    if (estimatedPitch >= 80 && estimatedPitch <= 2000) {
+                      setCurrentPitch(estimatedPitch);
+                      setPitchConfidence(0.3);
+                    } else {
+                      setCurrentPitch(0);
+                      setPitchConfidence(0);
+                    }
+                  } else {
+                    setCurrentPitch(0);
+                    setPitchConfidence(0);
+                  }
+                } else {
+                  setCurrentPitch(0);
+                  setPitchConfidence(0);
+                }
               }
             }
           }
@@ -225,7 +313,7 @@ export default function HitPitchScreen() {
         // Optional: Handle raw audio stream
         onAudioStream: async (audioData) => {
           // Could be used for additional real-time processing
-          console.log('Audio stream data received');
+          // console.log('Audio stream data received');
         },
 
         // Handle recording interruptions
@@ -260,6 +348,7 @@ export default function HitPitchScreen() {
       setCurrentPitch(0);
       setPitchConfidence(0);
       setRealtimeFeatures(null);
+      setAudioLevel(0);
     } catch (error) {
       console.error('Error stopping recording:', error);
     }
@@ -284,6 +373,21 @@ export default function HitPitchScreen() {
             <Text style={styles.recordingText}>
               Listening... {(durationMs / 1000).toFixed(1)}s
             </Text>
+            {/* Audio level indicator */}
+            <View style={styles.audioLevelContainer}>
+              <Text style={styles.audioLevelLabel}>Audio Level:</Text>
+              <View style={styles.audioLevelBar}>
+                <View 
+                  style={[
+                    styles.audioLevelFill, 
+                    { 
+                      width: `${Math.max(audioLevel * 100, 2)}%`,
+                      backgroundColor: audioLevel > 0.1 ? '#4CAF50' : '#F44336'
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
             <Pressable
               style={[styles.button, styles.stopButton]}
               onPress={handleStopPitchDetection}
@@ -294,47 +398,14 @@ export default function HitPitchScreen() {
         )}
       </View>
 
-      {/* Real-time Pitch Display */}
-      {isRecording && currentPitch > 0 && (
-        <PitchDisplay
-          frequency={currentPitch}
-          confidence={pitchConfidence}
-        />
-      )}
+      {/* Always show Pitch Display */}
+      <PitchDisplay
+        frequency={currentPitch}
+        confidence={pitchConfidence}
+      />
 
-      {/* No pitch detected message */}
-      {isRecording && currentPitch === 0 && (
-        <View style={styles.noPitchContainer}>
-          <Text style={styles.noPitchText}>
-            Play an instrument or sing to detect pitch...
-          </Text>
-        </View>
-      )}
-
-      {/* Real-time Audio Features */}
-      {isRecording && realtimeFeatures && (
-        <AudioFeaturesDisplay features={realtimeFeatures} />
-      )}
-
-      {/* Instructions */}
-      <View style={styles.instructionsContainer}>
-        <Text style={styles.instructionsTitle}>How to use:</Text>
-        <Text style={styles.instructionText}>
-          • Tap &quot;Start Pitch Detection&quot; to begin listening
-        </Text>
-        <Text style={styles.instructionText}>
-          • Play a musical instrument or sing into the microphone
-        </Text>
-        <Text style={styles.instructionText}>
-          • The detected note and frequency will be displayed in real-time
-        </Text>
-        <Text style={styles.instructionText}>
-          • The color indicates how close you are to the exact pitch
-        </Text>
-        <Text style={styles.instructionText}>
-          • Green: Very close, Orange: Somewhat close, Red: Far from pitch
-        </Text>
-      </View>
+      {/* Always show Audio Features */}
+      <AudioFeaturesDisplay features={realtimeFeatures} />
     </ScrollView>
   );
 }
@@ -393,31 +464,65 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 10,
   },
+  audioLevelContainer: {
+    width: '100%',
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  audioLevelLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  audioLevelBar: {
+    width: 200,
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  audioLevelFill: {
+    height: '100%',
+    borderRadius: 4,
+    minWidth: 2,
+  },
   pitchDisplay: {
     backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 20,
+    padding: 30,
     marginBottom: 20,
     alignItems: 'center',
-    elevation: 5,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    borderWidth: 3,
+    borderColor: '#4CAF50',
   },
   noteContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 10,
+    marginBottom: 15,
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#2196F3',
   },
   noteText: {
-    fontSize: 48,
+    fontSize: 72,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2196F3',
+    textShadowColor: '#cccccc',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 3,
   },
   octaveText: {
-    fontSize: 24,
-    color: '#666',
-    marginLeft: 5,
+    fontSize: 36,
+    color: '#2196F3',
+    marginLeft: 8,
+    fontWeight: 'bold',
   },
   frequencyText: {
     fontSize: 20,
@@ -446,19 +551,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  noPitchContainer: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  noPitchText: {
-    fontSize: 16,
-    color: '#888',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
   featuresContainer: {
     backgroundColor: 'white',
     borderRadius: 15,
@@ -485,23 +577,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     fontFamily: 'monospace',
-  },
-  instructionsContainer: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 20,
-  },
-  instructionsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333',
-  },
-  instructionText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-    lineHeight: 20,
   },
 });

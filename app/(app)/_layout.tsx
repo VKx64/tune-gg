@@ -18,6 +18,34 @@ export default function AppLayout() {
           headerRight: () => <Button onPress={handleLogout} title="Logout" />,
         }}
       />
+      <Stack.Screen
+        name="play"
+        options={{
+          title: 'Play',
+          headerRight: () => <Button onPress={handleLogout} title="Logout" />,
+        }}
+      />
+      <Stack.Screen
+        name="select"
+        options={{
+          title: 'Select',
+          headerRight: () => <Button onPress={handleLogout} title="Logout" />,
+        }}
+      />
+      <Stack.Screen
+        name="hit_pitch"
+        options={{
+          title: 'Pitch Detection',
+          headerRight: () => <Button onPress={handleLogout} title="Logout" />,
+        }}
+      />
+      <Stack.Screen
+        name="hit_pitch_simple"
+        options={{
+          title: 'Simple Pitch Detection',
+          headerRight: () => <Button onPress={handleLogout} title="Logout" />,
+        }}
+      />
     </Stack>
   );
 }
